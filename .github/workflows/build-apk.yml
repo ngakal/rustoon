@@ -8,7 +8,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,11 +16,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install Rust Android targets
         run: |
-          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -43,30 +43,87 @@ jobs:
 
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked
-      
+
       - name: Build Web (verify compilation)
         working-directory: crates/frontend
         run: dx build --platform web --release
 
-      - name: Build Android APK
+      # ─── Build arm64-v8a APK (covers most modern devices) ───
+      - name: Build Android APK (arm64-v8a)
         working-directory: crates/frontend
-        run: dx build --platform android --release
+        run: dx build --platform android --release --target aarch64-linux-android
         timeout-minutes: 30
 
-      - name: Find APK
-        id: find_apk
+      - name: Save arm64-v8a APK
         run: |
-          APK_PATH=$(find . -name "*.apk" -type f | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-          ls -lh "$APK_PATH" || echo "APK not found"
+          APK_PATH=$(find crates/frontend -name "*.apk" -type f | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" rustoon-arm64-v8a.apk
+            echo "arm64-v8a APK size: $(ls -lh rustoon-arm64-v8a.apk | awk '{print $5}')"
+          else
+            echo "ERROR: No arm64-v8a APK found"
+            echo "Searching build output..."
+            find crates/frontend/target -name "*.apk" -type f 2>/dev/null || true
+            find crates/frontend/target -name "*.so" -type f 2>/dev/null || true
+            ls -R crates/frontend/target/dx/ 2>/dev/null || true
+            exit 1
+          fi
 
-      - name: Upload APK artifact
+      # ─── Build armeabi-v7a APK (32-bit / older devices) ───
+      - name: Build Android APK (armeabi-v7a)
+        working-directory: crates/frontend
+        run: dx build --platform android --release --target armv7-linux-androideabi
+        timeout-minutes: 30
+
+      - name: Save armeabi-v7a APK
+        run: |
+          APK_PATH=$(find crates/frontend -name "*.apk" -type f | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" rustoon-armeabi-v7a.apk
+            echo "armeabi-v7a APK size: $(ls -lh rustoon-armeabi-v7a.apk | awk '{print $5}')"
+          else
+            echo "ERROR: No armeabi-v7a APK found"
+            exit 1
+          fi
+
+      # ─── Build x86_64 APK (emulators & some tablets) ───
+      - name: Build Android APK (x86_64)
+        working-directory: crates/frontend
+        run: dx build --platform android --release --target x86_64-linux-android
+        timeout-minutes: 30
+
+      - name: Save x86_64 APK
+        run: |
+          APK_PATH=$(find crates/frontend -name "*.apk" -type f | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" rustoon-x86_64.apk
+            echo "x86_64 APK size: $(ls -lh rustoon-x86_64.apk | awk '{print $5}')"
+          else
+            echo "WARNING: No x86_64 APK found (non-critical)"
+          fi
+
+      # ─── Upload Artifacts ───
+      - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: rustoon-apk
-          path: ${{ steps.find_apk.outputs.apk_path }}
+          name: rustoon-arm64-v8a
+          path: rustoon-arm64-v8a.apk
           retention-days: 30
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustoon-armeabi-v7a
+          path: rustoon-armeabi-v7a.apk
+          retention-days: 30
+
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustoon-x86_64
+          path: rustoon-x86_64.apk
+          retention-days: 30
+        if: hashFiles('rustoon-x86_64.apk') != ''
 
       - name: Upload Web build
         uses: actions/upload-artifact@v4
