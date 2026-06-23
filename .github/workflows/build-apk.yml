@@ -77,7 +77,12 @@ jobs:
             echo "Patching build.gradle.kts: $BUILD_GRADLE"
             # Add buildFeatures.buildConfig = true inside the android {} block
             sed -i '/android {/a\    buildFeatures {\n        buildConfig = true\n    }' "$BUILD_GRADLE"
-            echo "Patched build.gradle.kts with buildConfig = true"
+
+            # Fix namespace: AGP generates BuildConfig in the namespace package.
+            # Dioxus Logger.kt is in dev.dioxus.main, so namespace must match.
+            # Change namespace from com.rustoon.app to dev.dioxus.main
+            sed -i 's/namespace = "com.rustoon.app"/namespace = "dev.dioxus.main"/' "$BUILD_GRADLE"
+            echo "Patched build.gradle.kts with buildConfig=true and fixed namespace"
           fi
 
           # ─── Patch AndroidManifest.xml ───
