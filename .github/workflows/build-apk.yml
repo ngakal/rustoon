@@ -71,7 +71,16 @@ jobs:
 
       - name: Patch Android project for WebView compatibility
         run: |
-          # Find the generated Android manifest
+          # ─── Patch build.gradle to enable BuildConfig (AGP 8+ deprecation) ───
+          BUILD_GRADLE=$(find target/dx -name "build.gradle.kts" -path "*/app/*" | head -1)
+          if [ -n "$BUILD_GRADLE" ]; then
+            echo "Patching build.gradle.kts: $BUILD_GRADLE"
+            # Add buildFeatures.buildConfig = true inside the android {} block
+            sed -i '/android {/a\    buildFeatures {\n        buildConfig = true\n    }' "$BUILD_GRADLE"
+            echo "Patched build.gradle.kts with buildConfig = true"
+          fi
+
+          # ─── Patch AndroidManifest.xml ───
           MANIFEST=$(find target/dx -name "AndroidManifest.xml" -path "*/main/*" | head -1)
           if [ -n "$MANIFEST" ]; then
             echo "Patching AndroidManifest.xml: $MANIFEST"
@@ -97,7 +106,7 @@ jobs:
             echo "WARNING: AndroidManifest.xml not found"
           fi
 
-          # Copy network security config to the Android project
+          # ─── Copy network security config ───
           RES_XML=$(dirname "$(find target/dx -name "AndroidManifest.xml" -path "*/main/*" | head -1)")/res/xml
           mkdir -p "$RES_XML"
           if [ -f "crates/frontend/public/android-res/xml/network_security_config.xml" ]; then
@@ -105,7 +114,7 @@ jobs:
             echo "Copied network_security_config.xml to $RES_XML/"
           fi
 
-          # Patch MainActivity.kt to enable DOM storage and file access
+          # ─── Patch MainActivity.kt to enable DOM storage and file access ───
           MAIN_ACTIVITY=$(find target/dx -name "MainActivity.kt" -path "*/main/*" | head -1)
           if [ -n "$MAIN_ACTIVITY" ]; then
             echo "Patching MainActivity.kt: $MAIN_ACTIVITY"
