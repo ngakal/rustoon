@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow HTTPS connections to AniList API -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">anilist.co</domain>
+        <domain includeSubdomains="true">s4.anilist.co</domain>
+        <domain includeSubdomains="true">img.anili.st</domain>
+    </domain-config>
+
+    <!-- Allow HTTPS connections for cover images from any CDN -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

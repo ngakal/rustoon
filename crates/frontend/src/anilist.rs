@@ -1,6 +1,8 @@
 use rustoon_shared::models::*;
 use wasm_bindgen::prelude::*;
 
+const ANILIST_URL: &str = "https://graphql.anilist.co";
+
 pub async fn fetch_popular(page: i32) -> Vec<AniMedia> {
     let query = r#"query($page:Int,$perPage:Int){Page(page:$page,perPage:$perPage){media(type:MANGA,sort:POPULARITY_DESC){id title{romaji english native}description(asHtml:false)coverImage{extraLarge large medium color}bannerImage format status chapters volumes genres averageScore siteUrl countryOfOrigin}}}"#;
     let vars = format!(r#"{{"page":{page},"perPage":20}}"#);
@@ -21,49 +23,84 @@ pub async fn search_manga(q: &str) -> Vec<AniMedia> {
 }
 
 async fn fetch_query(query: &str, vars: &str) -> Vec<AniMedia> {
-    let window = match web_sys::window() {
-        Some(w) => w,
-        None => return vec![],
-    };
+    // Try the JS helper first (works in web browser with the injected script)
+    if let Some(result) = fetch_via_js_helper(query, vars).await {
+        return result;
+    }
 
-    // Get the JS helper function via Reflect
+    // Fallback: use web_sys::Request directly (works in Android WebView)
+    if let Some(result) = fetch_via_request_api(query, vars).await {
+        return result;
+    }
+
+    vec![]
+}
+
+/// Method 1: Use the window.__anilist_fetch JS helper function.
+/// This works when the HTML <script> tag is loaded (web browser).
+async fn fetch_via_js_helper(query: &str, vars: &str) -> Option<Vec<AniMedia>> {
+    let window = web_sys::window()?;
     let key = JsValue::from_str("__anilist_fetch");
-    let helper_val = match js_sys::Reflect::get(&window.into(), &key) {
-        Ok(v) if !v.is_undefined() && !v.is_null() => v,
-        _ => return vec![],
-    };
+    let helper_val = js_sys::Reflect::get(&window.into(), &key).ok()?;
 
-    // Cast to Function using dyn_ref on JsValue
-    let helper = match helper_val.dyn_ref::<js_sys::Function>() {
-        Some(f) => f,
-        None => return vec![],
-    };
+    if helper_val.is_undefined() || helper_val.is_null() {
+        return None;
+    }
 
-    // Call: window.__anilist_fetch(query, vars)
-    let result = match helper.call2(
+    let helper = helper_val.dyn_ref::<js_sys::Function>()?;
+
+    let result = helper.call2(
         &JsValue::NULL,
         &JsValue::from_str(query),
         &JsValue::from_str(vars),
-    ) {
-        Ok(r) => r,
-        Err(_) => return vec![],
-    };
+    ).ok()?;
 
-    // Await the Promise
     let promise = js_sys::Promise::from(result);
-    let text_val = match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(v) => v,
-        Err(_) => return vec![],
-    };
+    let text_val = wasm_bindgen_futures::JsFuture::from(promise).await.ok()?;
+    let text = text_val.as_string()?;
 
-    let text = match text_val.as_string() {
-        Some(t) => t,
-        None => return vec![],
-    };
+    if text.is_empty() { return None; }
 
-    if text.is_empty() { return vec![]; }
+    Some(parse_anilist_response(&text))
+}
 
-    serde_json::from_str::<AniListResponse>(&text)
+/// Method 2: Use web_sys::Request API directly.
+/// This works in Android WebView where the JS helper may not be injected.
+async fn fetch_via_request_api(query: &str, vars: &str) -> Option<Vec<AniMedia>> {
+    let window = web_sys::window()?;
+
+    let body = format!(r#"{{"query":{},"variables":{}}}"#,
+        serde_json::to_string(query).ok()?,
+        vars
+    );
+
+    let opts = web_sys::RequestInit::new();
+    opts.set_method("POST");
+
+    let headers = web_sys::Headers::new().ok()?;
+    headers.set("Content-Type", "application/json").ok()?;
+    headers.set("Accept", "application/json").ok()?;
+    opts.set_headers(&headers.into());
+
+    opts.set_body(&JsValue::from_str(&body));
+
+    let request = web_sys::Request::new_with_str_and_init(ANILIST_URL, &opts).ok()?;
+    let promise = window.fetch_with_request(&request);
+
+    let response_val = wasm_bindgen_futures::JsFuture::from(promise).await.ok()?;
+    let response: web_sys::Response = response_val.dyn_into().ok()?;
+
+    let text_promise = response.text().ok()?;
+    let text_val = wasm_bindgen_futures::JsFuture::from(text_promise).await.ok()?;
+    let text = text_val.as_string()?;
+
+    if text.is_empty() { return None; }
+
+    Some(parse_anilist_response(&text))
+}
+
+fn parse_anilist_response(text: &str) -> Vec<AniMedia> {
+    serde_json::from_str::<AniListResponse>(text)
         .ok()
         .and_then(|r| r.data)
         .and_then(|d| d.page)

@@ -138,6 +138,11 @@ html, body {
 .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
 .empty-state p { font-size: 13px; color: var(--text-secondary); }
 
+.error-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 12px; padding: 32px; text-align: center; color: var(--text-secondary); }
+.error-screen h3 { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.error-screen p { font-size: 14px; line-height: 1.5; max-width: 280px; }
+.error-icon { width: 48px; height: 48px; color: var(--accent); margin-bottom: 8px; }
+
 .comic-card-img-wrap { position: relative; }
 .comic-card-score { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.75); color: #ffd700; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 2px; }
 
