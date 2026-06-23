@@ -1,0 +1,21 @@
+[application]
+name = "RustToon"
+default_platform = "web"
+asset_dir = "public"
+
+[web.app]
+title = "RustToon — Webtoon Reader"
+base_path = "."
+
+[web.watcher]
+watch_path = ["src", "public"]
+
+[web.resource]
+style = ["style.css"]
+
+[web.resource.dev]
+
+[bundle]
+identifier = "com.rustoon.app"
+publisher = "RustToon"
+icon = ["public/icon.png"]

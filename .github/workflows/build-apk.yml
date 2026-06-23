@@ -1,0 +1,76 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Install Rust Android targets
+        run: |
+          rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK & Build Tools
+        run: |
+          sdkmanager --install "ndk;27.0.12077973" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set Android environment
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked
+      
+      - name: Build Web (verify compilation)
+        working-directory: crates/frontend
+        run: dx build --platform web --release
+
+      - name: Build Android APK
+        working-directory: crates/frontend
+        run: dx build --platform android --release
+        timeout-minutes: 30
+
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+          ls -lh "$APK_PATH" || echo "APK not found"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustoon-apk
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 30
+
+      - name: Upload Web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustoon-web
+          path: crates/frontend/target/dx/rustoon-frontend/release/web/public/
+          retention-days: 30

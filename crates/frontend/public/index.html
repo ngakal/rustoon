@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>RustToon — Webtoon Reader</title>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <meta charset="UTF-8">
+        <link rel="stylesheet" href="/style.css">
+        <script>
+        window.__anilist_fetch = function(query, vars) {
+          return fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','Accept':'application/json'},
+            body: JSON.stringify({query: query, variables: JSON.parse(vars)})
+          }).then(function(r) { return r.text(); });
+        };
+        </script>
+    </head>
+    <body>
+        <div id="main"></div>
+    </body>
+</html>
