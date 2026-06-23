@@ -58,102 +58,16 @@ jobs:
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --locked
 
-      - name: Build Web (verify compilation)
+      - name: Build Web
         working-directory: crates/frontend
         run: dx build --platform web --release
 
-      # ─── Build arm64-v8a APK (most modern Android devices) ───
+      # ─── Build arm64-v8a APK (covers 99%+ of modern Android devices) ───
       # Note: Dioxus only supports 64-bit Android targets.
       - name: Build Android APK (arm64-v8a)
         working-directory: crates/frontend
         run: dx build --platform android --release --target aarch64-linux-android
         timeout-minutes: 30
-
-      - name: Patch Android project for WebView compatibility
-        run: |
-          # ─── Patch build.gradle to enable BuildConfig (AGP 8+ deprecation) ───
-          BUILD_GRADLE=$(find target/dx -name "build.gradle.kts" -path "*/app/*" | head -1)
-          if [ -n "$BUILD_GRADLE" ]; then
-            echo "Patching build.gradle.kts: $BUILD_GRADLE"
-            # Add buildFeatures.buildConfig = true inside the android {} block
-            sed -i '/android {/a\    buildFeatures {\n        buildConfig = true\n    }' "$BUILD_GRADLE"
-
-            # Fix namespace: AGP generates BuildConfig in the namespace package.
-            # Dioxus Logger.kt is in dev.dioxus.main, so namespace must match.
-            # Change namespace from com.rustoon.app to dev.dioxus.main
-            sed -i 's/namespace = "com.rustoon.app"/namespace = "dev.dioxus.main"/' "$BUILD_GRADLE"
-            echo "Patched build.gradle.kts with buildConfig=true and fixed namespace"
-          fi
-
-          # ─── Patch AndroidManifest.xml ───
-          MANIFEST=$(find target/dx -name "AndroidManifest.xml" -path "*/main/*" | head -1)
-          if [ -n "$MANIFEST" ]; then
-            echo "Patching AndroidManifest.xml: $MANIFEST"
-
-            # Add INTERNET permission if not present
-            if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
-              sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
-            fi
-
-            # Add ACCESS_NETWORK_STATE permission
-            if ! grep -q "android.permission.ACCESS_NETWORK_STATE" "$MANIFEST"; then
-              sed -i '/<manifest/a\    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
-            fi
-
-            # Add networkSecurityConfig to <application> tag
-            if ! grep -q "networkSecurityConfig" "$MANIFEST"; then
-              sed -i 's/<application/<application android:networkSecurityConfig="@xml\/network_security_config"/' "$MANIFEST"
-            fi
-
-            echo "Patched manifest:"
-            cat "$MANIFEST"
-          else
-            echo "WARNING: AndroidManifest.xml not found"
-          fi
-
-          # ─── Copy network security config ───
-          RES_XML=$(dirname "$(find target/dx -name "AndroidManifest.xml" -path "*/main/*" | head -1)")/res/xml
-          mkdir -p "$RES_XML"
-          if [ -f "crates/frontend/public/android-res/xml/network_security_config.xml" ]; then
-            cp crates/frontend/public/android-res/xml/network_security_config.xml "$RES_XML/"
-            echo "Copied network_security_config.xml to $RES_XML/"
-          fi
-
-          # ─── Patch MainActivity.kt to enable DOM storage and file access ───
-          MAIN_ACTIVITY=$(find target/dx -name "MainActivity.kt" -path "*/main/*" | head -1)
-          if [ -n "$MAIN_ACTIVITY" ]; then
-            echo "Patching MainActivity.kt: $MAIN_ACTIVITY"
-            cat > "$MAIN_ACTIVITY" << 'KOTLIN'
-          package dev.dioxus.main
-
-          import android.webkit.WebView
-          import android.webkit.WebSettings
-
-          class MainActivity : WryActivity() {
-              override fun onWebViewCreate(webView: WebView) {
-                  super.onWebViewCreate(webView)
-                  val settings = webView.settings
-                  settings.javaScriptEnabled = true
-                  settings.domStorageEnabled = true
-                  settings.databaseEnabled = true
-                  settings.allowFileAccess = true
-                  settings.allowContentAccess = true
-                  settings.useWideViewPort = true
-                  settings.loadWithOverviewMode = true
-                  settings.cacheMode = WebSettings.LOAD_DEFAULT
-                  settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-              }
-          }
-          KOTLIN
-            echo "Patched MainActivity.kt with DOM storage and WebView settings"
-          fi
-
-      - name: Rebuild APK with patches
-        working-directory: target/dx/rustoon-frontend/release/android/app
-        run: |
-          chmod +x gradlew
-          ./gradlew clean assembleDebug
-        timeout-minutes: 10
 
       - name: Save arm64-v8a APK
         id: arm64_apk
@@ -170,7 +84,6 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
 
-      # ─── Upload Artifacts ───
       - name: Upload arm64-v8a APK
         if: steps.arm64_apk.outputs.found == 'true'
         uses: actions/upload-artifact@v4
