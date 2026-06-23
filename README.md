@@ -32,6 +32,24 @@ dx build --platform android --release
 # Output: target/dx/rustoon-frontend/release/android/*.apk
 ```
 
+## Deploy to GitHub Pages
+```bash
+# Optional local verification before pushing
+cargo install dioxus-cli
+cd crates/frontend
+dx build --platform web --release
+```
+
+After that:
+- Push to `main`
+- In GitHub repository settings, open `Pages`
+- Set the source to `GitHub Actions`
+- The workflow `.github/workflows/deploy-pages.yml` will publish the web build
+
+Notes:
+- The Pages site URL will usually be `https://<user>.github.io/<repo>/`
+- The app uses a relative stylesheet path so it can load correctly from a GitHub Pages project site
+
 ## Architecture
 ```
 rustoon/
