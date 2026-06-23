@@ -147,7 +147,7 @@ jobs:
         working-directory: target/dx/rustoon-frontend/release/android/app
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew clean assembleDebug
         timeout-minutes: 10
 
       - name: Save arm64-v8a APK
